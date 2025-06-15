@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Search, Bot, MessageSquare, Volume2, Loader2, Send, Wand2, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { mockVendors, Vendor } from "@/data/mockVendors";
+import { mockVendors, Vendor, predefinedQuestions } from "@/data/mockVendors";
 import { useToast } from "@/hooks/use-toast";
 import {
   ResponsiveContainer,
@@ -20,6 +19,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 const Index = () => {
   const [keywords, setKeywords] = useState("led lights");
@@ -29,6 +29,9 @@ const Index = () => {
   const [isQuerying, setIsQuerying] = useState(false);
   const [queryResult, setQueryResult] = useState("");
   const { toast } = useToast();
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
+  const [isReplyDialogOpen, setIsReplyDialogOpen] = useState(false);
 
   const handleScrape = () => {
     if (!keywords) {
@@ -45,13 +48,15 @@ const Index = () => {
     }, 2000);
   };
 
-  const handleContact = (vendorId: number) => {
+  const handleSendMessage = (vendorId: number) => {
+    const vendorName = vendors.find(v => v.id === vendorId)?.name || 'the vendor';
     setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, status: 'Messaged' } : v));
-    toast({ title: "Message Sent!", description: `Contacting vendor...` });
+    toast({ title: "Message Sent!", description: `Contacting ${vendorName}...` });
+    setIsContactDialogOpen(false);
 
     setTimeout(() => {
         setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, status: 'Responded', reply: "Yes, we can provide CE. Our MOQ is 500 units." } : v));
-        toast({ title: "New Reply!", description: `You have a new message from a vendor.` });
+        toast({ title: "New Reply!", description: `You have a new message from ${vendorName}.` });
     }, 4000);
   };
 
@@ -103,6 +108,16 @@ const Index = () => {
 
   const chartData = vendors.map(vendor => ({ name: vendor.name.split(' ')[0], responseRate: vendor.responseRate }));
 
+  const openContactDialog = (vendor: Vendor) => {
+    setSelectedVendor(vendor);
+    setIsContactDialogOpen(true);
+  };
+
+  const openReplyDialog = (vendor: Vendor) => {
+    setSelectedVendor(vendor);
+    setIsReplyDialogOpen(true);
+  };
+
   return (
     <div className="min-h-screen w-full p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -141,7 +156,7 @@ const Index = () => {
               <CardHeader>
                 <CardTitle>Vendor Information</CardTitle>
                 <CardDescription>
-                  {vendors.length > 0 ? `Showing ${vendors.length} vendors. Click 'Contact' to send a message.` : "No vendors scraped yet."}
+                  {vendors.length > 0 ? `Showing ${vendors.length} potential vendors. Click 'Contact' to send a message.` : "No vendors scraped yet."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -181,9 +196,21 @@ const Index = () => {
                         </TableCell>
                         <TableCell><Badge variant={getStatusBadgeVariant(vendor.status)}>{vendor.status}</Badge></TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" onClick={() => handleContact(vendor.id)} disabled={vendor.status !== 'Not Contacted'}>
-                            <MessageSquare className="mr-2 h-4 w-4"/> Contact
-                          </Button>
+                          {vendor.status === 'Not Contacted' && (
+                            <Button size="sm" onClick={() => openContactDialog(vendor)}>
+                              <MessageSquare /> Contact
+                            </Button>
+                          )}
+                          {(vendor.status === 'Messaged' || vendor.status === 'Follow-up Sent') && (
+                            <Button size="sm" disabled>
+                              <Loader2 className="animate-spin"/> Awaiting
+                            </Button>
+                          )}
+                           {vendor.status === 'Responded' && (
+                            <Button size="sm" variant="outline" onClick={() => openReplyDialog(vendor)}>
+                              View Reply
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -258,6 +285,43 @@ const Index = () => {
           </div>
         </main>
       </div>
+
+      <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Contact {selectedVendor?.name}</DialogTitle>
+                <DialogDescription>
+                    This pre-filled message with standard questions will be sent to the vendor.
+                </DialogDescription>
+            </DialogHeader>
+            <Textarea
+                readOnly
+                value={predefinedQuestions.join("\n")}
+                rows={predefinedQuestions.length + 1}
+                className="text-sm bg-muted/50"
+            />
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsContactDialogOpen(false)}>Cancel</Button>
+                <Button onClick={() => selectedVendor && handleSendMessage(selectedVendor.id)}>
+                  <Send /> Send Message
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isReplyDialogOpen} onOpenChange={setIsReplyDialogOpen}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle>Reply from {selectedVendor?.name}</DialogTitle>
+              </DialogHeader>
+              <div className="p-4 bg-muted rounded-md text-sm my-4">
+                  <p className="whitespace-pre-wrap">{selectedVendor?.reply}</p>
+              </div>
+              <DialogFooter>
+                  <Button onClick={() => setIsReplyDialogOpen(false)}>Close</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 };
